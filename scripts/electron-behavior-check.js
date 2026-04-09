@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { app, globalShortcut } = require("electron");
+const { app, globalShortcut, ipcMain } = require("electron");
 const {
   createMainWindow,
   loadMainWindowContent,
@@ -11,6 +11,7 @@ const {
   DEFAULT_TOGGLE_SHORTCUT,
   FALLBACK_TOGGLE_SHORTCUT,
   FALLBACK_TOGGLE_SHORTCUTS,
+  resolveHotkeyConfig,
   registerGlobalHotkeys,
   unregisterGlobalHotkeys,
 } = require("../electron/hotkeys");
@@ -94,6 +95,7 @@ async function inspectRenderer(mainWindow) {
       astraKeys: Object.keys(window.astra || {}).sort(),
       astraBridgeShape: {
         isAvailable: window.astra?.isAvailable === true,
+        getAppInfo: typeof window.astra?.getAppInfo,
         llm: typeof window.astra?.llm,
         tool: typeof window.astra?.tool,
         ragQuery: typeof window.astra?.ragQuery,
@@ -118,6 +120,7 @@ async function run() {
       crashDumps: isolatedCrashPath,
     },
     intendedRendererEntry: "",
+    configuredHotkey: null,
     renderer: null,
     toggle: null,
     hotkey: null,
@@ -125,12 +128,48 @@ async function run() {
   };
 
   let mainWindow = null;
+  let currentHotkeyStatus = {
+    available: false,
+    configuredShortcut: null,
+    shortcut: null,
+    source: "default",
+    usedFallback: false,
+  };
 
   try {
     await app.whenReady();
 
     report.intendedRendererEntry = resolveRendererEntry(app);
+    const hotkeyConfig = resolveHotkeyConfig({ app });
+    report.configuredHotkey = {
+      shortcut: hotkeyConfig.shortcut,
+      fallbackShortcuts: hotkeyConfig.fallbackShortcuts,
+      source: hotkeyConfig.source,
+      settingsPath: hotkeyConfig.settingsPath,
+      errors: hotkeyConfig.errors,
+    };
+
+    ipcMain.removeHandler("astra:app-info");
+    ipcMain.handle("astra:app-info", async () => ({
+      hotkey: currentHotkeyStatus,
+    }));
+
     mainWindow = createMainWindow(app, { showOnLaunch: false });
+
+    const registration = registerGlobalHotkeys({
+      fallbackShortcut: hotkeyConfig.fallbackShortcuts[0],
+      fallbackShortcuts: hotkeyConfig.fallbackShortcuts,
+      shortcut: hotkeyConfig.shortcut,
+      toggleMainWindow: () => toggleMainWindow(mainWindow),
+    });
+
+    currentHotkeyStatus = {
+      available: true,
+      configuredShortcut: hotkeyConfig.shortcut,
+      shortcut: registration.shortcut,
+      source: hotkeyConfig.source,
+      usedFallback: registration.usedFallback,
+    };
 
     const failLoad = waitForEvent(mainWindow.webContents, "did-fail-load", 15000).then((args) => {
       const [, errorCode, errorDescription, validatedURL] = args;
@@ -157,10 +196,6 @@ async function run() {
       visibleAfterSecondToggle,
     };
 
-    const registration = registerGlobalHotkeys({
-      toggleMainWindow: () => toggleMainWindow(mainWindow),
-    });
-
     report.hotkey = {
       requestedShortcut: registration.requestedShortcut,
       shortcut: registration.shortcut,
@@ -180,6 +215,8 @@ async function run() {
       stack: error.stack || "",
     });
   } finally {
+    ipcMain.removeHandler("astra:app-info");
+
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.destroy();
     }

@@ -31,7 +31,7 @@ if (APP_DIAGNOSTIC_MODE) {
 
 const { app, BrowserWindow, ipcMain } = electronModule;
 const { createMainWindow, loadMainWindowContent, toggleMainWindow } = require("./window");
-const { registerGlobalHotkeys, unregisterGlobalHotkeys } = require("./hotkeys");
+const { registerGlobalHotkeys, resolveHotkeyConfig, unregisterGlobalHotkeys } = require("./hotkeys");
 const { handleLLMRequest } = require("./ollamaClient");
 const { handleToolCall } = require("./tools/registry");
 const { handleRAGQuery, handleRAGIngest } = require("./rag");
@@ -46,47 +46,93 @@ if (APP_DIAGNOSTIC_MODE) {
 }
 
 let mainWindow = null;
+let hotkeyStatus = {
+  available: false,
+  configuredShortcut: null,
+  shortcut: null,
+  source: "default",
+  usedFallback: false,
+};
 
 function registerIpcHandlers() {
   ipcMain.removeHandler("astra:llm");
   ipcMain.removeHandler("astra:tool");
   ipcMain.removeHandler("astra:rag:query");
   ipcMain.removeHandler("astra:rag:ingest");
+  ipcMain.removeHandler("astra:app-info");
 
   ipcMain.handle("astra:llm", handleLLMRequest);
   ipcMain.handle("astra:tool", handleToolCall);
   ipcMain.handle("astra:rag:query", handleRAGQuery);
   ipcMain.handle("astra:rag:ingest", handleRAGIngest);
+  ipcMain.handle("astra:app-info", async () => ({
+    hotkey: hotkeyStatus,
+  }));
 }
 
 async function openMainWindow() {
   mainWindow = createMainWindow(app);
-  await loadMainWindowContent(app, mainWindow);
 
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 
+  registerWindowHotkey(mainWindow);
+  await loadMainWindowContent(app, mainWindow);
+
   return mainWindow;
+}
+
+function registerWindowHotkey(targetWindow) {
+  try {
+    const hotkeyConfig = resolveHotkeyConfig({ app });
+
+    hotkeyConfig.errors.forEach((message) => {
+      console.warn(`Astra hotkey config warning: ${message}`);
+    });
+
+    const hotkeyRegistration = registerGlobalHotkeys({
+      fallbackShortcut: hotkeyConfig.fallbackShortcuts[0],
+      fallbackShortcuts: hotkeyConfig.fallbackShortcuts,
+      shortcut: hotkeyConfig.shortcut,
+      toggleMainWindow: () => toggleMainWindow(targetWindow),
+    });
+
+    hotkeyStatus = {
+      available: true,
+      configuredShortcut: hotkeyConfig.shortcut,
+      shortcut: hotkeyRegistration.shortcut,
+      source: hotkeyConfig.source,
+      usedFallback: hotkeyRegistration.usedFallback,
+    };
+
+    if (hotkeyRegistration.usedFallback) {
+      const sourceDescription =
+        hotkeyConfig.source === "settings" && hotkeyConfig.settingsPath
+          ? ` via ${hotkeyConfig.settingsPath}`
+          : hotkeyConfig.source === "env"
+            ? " via ASTRA_TOGGLE_SHORTCUT"
+            : "";
+
+      console.warn(
+        `Astra hotkey fallback active: requested ${hotkeyRegistration.requestedShortcut}${sourceDescription}, using ${hotkeyRegistration.shortcut}.`,
+      );
+    }
+  } catch (error) {
+    hotkeyStatus = {
+      available: false,
+      configuredShortcut: null,
+      shortcut: null,
+      source: "default",
+      usedFallback: false,
+    };
+    console.warn(`Astra hotkey registration skipped: ${error.message}`);
+  }
 }
 
 app.whenReady().then(async () => {
   registerIpcHandlers();
   await openMainWindow();
-
-  try {
-    const hotkeyRegistration = registerGlobalHotkeys({
-      toggleMainWindow: () => toggleMainWindow(mainWindow),
-    });
-
-    if (hotkeyRegistration.usedFallback) {
-      console.warn(
-        `Astra hotkey fallback active: requested ${hotkeyRegistration.requestedShortcut}, using ${hotkeyRegistration.shortcut}.`,
-      );
-    }
-  } catch (error) {
-    console.warn(`Astra hotkey registration skipped: ${error.message}`);
-  }
 
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {

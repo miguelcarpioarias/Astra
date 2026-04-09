@@ -5,3 +5,4 @@ data/*
 !data/chroma/
 data/chroma/*
 !data/chroma/.gitkeep
+!data/settings.example.json

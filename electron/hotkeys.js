@@ -1,4 +1,11 @@
 const { globalShortcut } = require("electron");
+const {
+  TOGGLE_FALLBACK_SHORTCUTS_ENV_VAR,
+  TOGGLE_SHORTCUT_ENV_VAR,
+  loadSettings,
+  normalizeShortcut,
+  parseShortcutList,
+} = require("./settings");
 
 const DEFAULT_TOGGLE_SHORTCUT = "Alt+Space";
 const FALLBACK_TOGGLE_SHORTCUT = "CommandOrControl+Shift+Space";
@@ -14,6 +21,31 @@ function tryRegisterShortcut(shortcut, toggleMainWindow) {
   }
 
   return globalShortcut.register(shortcut, toggleMainWindow);
+}
+
+function resolveHotkeyConfig({ app, env = process.env } = {}) {
+  const settingsResult = loadSettings({ app, env });
+  const settings = settingsResult.settings || {};
+  const configuredShortcut = normalizeShortcut(settings?.hotkeys?.toggle);
+  const configuredFallbacks = parseShortcutList(settings?.hotkeys?.fallbacks);
+  const envShortcut = normalizeShortcut(env[TOGGLE_SHORTCUT_ENV_VAR]);
+  const envFallbacks = parseShortcutList(env[TOGGLE_FALLBACK_SHORTCUTS_ENV_VAR]);
+
+  const shortcut = envShortcut || configuredShortcut || DEFAULT_TOGGLE_SHORTCUT;
+  const source = envShortcut ? "env" : configuredShortcut ? "settings" : "default";
+  const preferredFallbacks = envFallbacks.length > 0 ? envFallbacks : configuredFallbacks;
+  const fallbackShortcuts = [
+    ...preferredFallbacks,
+    ...FALLBACK_TOGGLE_SHORTCUTS,
+  ].filter((candidate) => candidate && candidate !== shortcut);
+
+  return {
+    errors: settingsResult.errors,
+    fallbackShortcuts: [...new Set(fallbackShortcuts)],
+    settingsPath: settingsResult.path,
+    shortcut,
+    source,
+  };
 }
 
 function registerGlobalHotkeys({
@@ -56,6 +88,7 @@ module.exports = {
   DEFAULT_TOGGLE_SHORTCUT,
   FALLBACK_TOGGLE_SHORTCUT,
   FALLBACK_TOGGLE_SHORTCUTS,
+  resolveHotkeyConfig,
   registerGlobalHotkeys,
   unregisterGlobalHotkeys,
 };

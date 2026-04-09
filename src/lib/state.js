@@ -11,6 +11,15 @@ export const useAstraStore = create((set) => ({
   isThinking: false,
   model: "phi4:14b",
   lastError: "",
+  appInfo: {
+    hotkey: {
+      available: false,
+      configuredShortcut: null,
+      shortcut: null,
+      source: "default",
+      usedFallback: false,
+    },
+  },
 
   setTheme: (theme) => set({ theme }),
   addMessage: (message) =>
@@ -18,6 +27,7 @@ export const useAstraStore = create((set) => ({
   setThinking: (isThinking) => set({ isThinking }),
   setModel: (model) => set({ model }),
   setLastError: (lastError) => set({ lastError }),
+  setAppInfo: (appInfo) => set({ appInfo }),
   clearMessages: () =>
     set({
       messages: [

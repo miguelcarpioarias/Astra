@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useAstraStore } from "./lib/state";
+import { getAppInfo } from "./lib/appClient";
 import CommandBar from "./components/CommandBar";
 import ChatCanvas from "./components/ChatCanvas";
 import Sidebar from "./components/Sidebar";
@@ -9,11 +10,43 @@ import { ActionRow } from "./components/ActionRow";
 export default function App() {
   const theme = useAstraStore((state) => state.theme);
   const lastError = useAstraStore((state) => state.lastError);
+  const setAppInfo = useAstraStore((state) => state.setAppInfo);
 
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", theme === "dark");
   }, [theme]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function syncAppInfo() {
+      try {
+        const appInfo = await getAppInfo();
+        if (isMounted) {
+          setAppInfo(appInfo);
+        }
+      } catch {
+        if (isMounted) {
+          setAppInfo({
+            hotkey: {
+              available: false,
+              configuredShortcut: null,
+              shortcut: null,
+              source: "default",
+              usedFallback: false,
+            },
+          });
+        }
+      }
+    }
+
+    syncAppInfo();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [setAppInfo]);
 
   return (
     <div className="flex h-screen w-screen bg-astral-bgDark text-sm text-slate-100">

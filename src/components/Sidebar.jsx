@@ -1,10 +1,31 @@
 import { useAstraStore } from "../lib/state";
 
+function formatShortcut(shortcut) {
+  if (!shortcut) {
+    return "Unavailable";
+  }
+
+  return shortcut
+    .split("+")
+    .map((part) => {
+      switch (part) {
+        case "CommandOrControl":
+          return "Ctrl/Cmd";
+        default:
+          return part;
+      }
+    })
+    .join(" + ");
+}
+
 export default function Sidebar() {
   const theme = useAstraStore((state) => state.theme);
   const setTheme = useAstraStore((state) => state.setTheme);
   const model = useAstraStore((state) => state.model);
   const messages = useAstraStore((state) => state.messages);
+  const hotkey = useAstraStore((state) => state.appInfo.hotkey);
+  const activeHotkeyLabel = formatShortcut(hotkey.shortcut);
+  const requestedHotkeyLabel = formatShortcut(hotkey.configuredShortcut);
 
   return (
     <aside className="flex w-80 flex-col border-l border-white/10 bg-black/30 backdrop-blur-sm">
@@ -29,6 +50,19 @@ export default function Sidebar() {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
             <div className="text-sm text-slate-100">{messages.length} messages</div>
             <div className="mt-1 text-slate-400">Current model: {model}</div>
+            <div className="mt-3 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/80">
+                Window Hotkey
+              </div>
+              <div className="mt-2 text-sm text-cyan-50">{activeHotkeyLabel}</div>
+              <div className="mt-1 text-slate-400">
+                {hotkey.available
+                  ? hotkey.usedFallback
+                    ? `Using a fallback instead of ${requestedHotkeyLabel}.`
+                    : "Active now for window toggle."
+                  : "No global shortcut is active on this machine."}
+              </div>
+            </div>
           </div>
         </section>
 

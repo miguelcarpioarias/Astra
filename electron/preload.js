@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld("astra", {
   tool: (payload) => ipcRenderer.invoke("astra:tool", payload),
   ragQuery: (payload) => ipcRenderer.invoke("astra:rag:query", payload),
   ragIngest: (payload) => ipcRenderer.invoke("astra:rag:ingest", payload),
+  getAppInfo: () => ipcRenderer.invoke("astra:app-info"),
   isAvailable: true
 });

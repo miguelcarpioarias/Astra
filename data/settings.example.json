@@ -1,0 +1,8 @@
+{
+  "hotkeys": {
+    "toggle": "CommandOrControl+Alt+A",
+    "fallbacks": [
+      "CommandOrControl+Shift+A"
+    ]
+  }
+}
