@@ -6,8 +6,12 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite",
-    "dev:electron": "wait-on tcp:5173 && electron .",
-    "start": "electron .",
+    "dev:electron": "set \"ELECTRON_RUN_AS_NODE=\" && set \"VITE_DEV_SERVER_URL=http://localhost:5173\" && wait-on http://localhost:5173 && electron .",
+    "diagnose:electron": "set \"ELECTRON_RUN_AS_NODE=\" && electron scripts/electron-diagnostic.js",
+    "diagnose:electron-app": "set \"ELECTRON_RUN_AS_NODE=\" && set \"ASTRA_ELECTRON_APP_DIAGNOSTIC=1\" && electron .",
+    "diagnose:behavior:build": "set \"ELECTRON_RUN_AS_NODE=\" && electron scripts/electron-behavior-check.js --mode=build",
+    "diagnose:behavior:dev": "set \"ELECTRON_RUN_AS_NODE=\" && set \"VITE_DEV_SERVER_URL=http://localhost:5173\" && electron scripts/electron-behavior-check.js --mode=dev",
+    "start": "set \"ELECTRON_RUN_AS_NODE=\" && electron .",
     "build": "vite build",
     "lint": "eslint . --max-warnings=0"
   },

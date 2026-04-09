@@ -1,16 +1,23 @@
 const path = require("path");
+const fs = require("fs");
 const { BrowserWindow } = require("electron");
 
 function isDevelopment(app) {
-  return !app.isPackaged || Boolean(process.env.VITE_DEV_SERVER_URL);
+  return Boolean(process.env.VITE_DEV_SERVER_URL) || !app.isPackaged;
 }
 
 function resolveRendererEntry(app) {
-  if (isDevelopment(app)) {
-    return process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devServerUrl) {
+    return devServerUrl;
   }
 
-  return path.join(__dirname, "../dist/index.html");
+  const builtIndex = path.join(__dirname, "../dist/index.html");
+  if (app.isPackaged || fs.existsSync(builtIndex)) {
+    return builtIndex;
+  }
+
+  return "http://localhost:5173";
 }
 
 async function loadMainWindowContent(app, mainWindow) {
@@ -75,5 +82,6 @@ function toggleMainWindow(mainWindow) {
 module.exports = {
   createMainWindow,
   loadMainWindowContent,
+  resolveRendererEntry,
   toggleMainWindow,
 };
