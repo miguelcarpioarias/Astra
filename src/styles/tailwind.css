@@ -9,5 +9,10 @@ body,
 }
 
 body {
-  @apply bg-astral-bgDark text-white;
+  margin: 0;
+  @apply bg-astral-bgDark text-white antialiased;
+}
+
+::selection {
+  background: rgba(99, 102, 241, 0.35);
 }

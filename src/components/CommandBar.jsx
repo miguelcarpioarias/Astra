@@ -1,47 +1,63 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useAstraStore } from "../lib/state";
-import { askLLM } from "../lib/llmClient";
+import { orchestrator } from "../lib/orchestrator";
 
 export default function CommandBar() {
   const [input, setInput] = useState("");
-  const model = useAstraStore((s) => s.model);
-  const addMessage = useAstraStore((s) => s.addMessage);
-  const setThinking = useAstraStore((s) => s.setThinking);
+  const model = useAstraStore((state) => state.model);
+  const addMessage = useAstraStore((state) => state.addMessage);
+  const setThinking = useAstraStore((state) => state.setThinking);
+  const setLastError = useAstraStore((state) => state.setLastError);
+  const isThinking = useAstraStore((state) => state.isThinking);
 
-  async function onSubmit(e) {
-    e.preventDefault();
+  async function onSubmit(event) {
+    event.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      return;
+    }
 
     addMessage({ role: "user", content: trimmed });
     setInput("");
     setThinking(true);
+    setLastError("");
 
-    const reply = await askLLM({
-      model,
-      prompt: trimmed
-    });
+    try {
+      const result = await orchestrator({
+        model,
+        prompt: trimmed,
+      });
 
-    addMessage({ role: "assistant", content: reply });
-    setThinking(false);
+      addMessage({ role: "assistant", content: result.reply });
+    } catch (error) {
+      setLastError(error.message);
+      addMessage({
+        role: "assistant",
+        content: `I hit an error while processing that request: ${error.message}`,
+      });
+    } finally {
+      setThinking(false);
+    }
   }
 
   return (
     <form
       onSubmit={onSubmit}
-      className="w-full px-6 py-3 border-b border-white/10 flex items-center gap-3 bg-gradient-to-r from-black/60 to-black/40"
+      className="flex w-full items-center gap-3 border-b border-white/10 bg-gradient-to-r from-black/70 to-black/40 px-6 py-3"
     >
       <input
-        className="flex-1 bg-white/5 dark:bg-white/5 bg-opacity-80 rounded-full px-4 py-2 outline-none text-sm placeholder:text-gray-400"
-        placeholder="Ask Astra…  (supports natural language, slash commands, and RAG)"
+        className="flex-1 rounded-full bg-white/5 px-4 py-2 text-sm outline-none ring-1 ring-transparent transition placeholder:text-slate-400 focus:ring-astral-accent"
+        placeholder="Ask Astra... supports chat plus local retrieval context"
         value={input}
-        onChange={(e) => setInput(e.target.value)}
+        onChange={(event) => setInput(event.target.value)}
+        disabled={isThinking}
       />
       <button
         type="submit"
-        className="px-4 py-2 rounded-full bg-astral-accent text-white text-xs font-medium hover:bg-astral-accentSoft transition"
+        className="rounded-full bg-astral-accent px-4 py-2 text-xs font-medium text-white transition hover:bg-astral-accentSoft disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={isThinking}
       >
-        Send
+        {isThinking ? "Working..." : "Send"}
       </button>
     </form>
   );

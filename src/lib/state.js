@@ -2,13 +2,29 @@ import { create } from "zustand";
 
 export const useAstraStore = create((set) => ({
   theme: "dark",
-  messages: [],
+  messages: [
+    {
+      role: "assistant",
+      content: "Astra is ready. Ask a question, or drop a file to index it for retrieval.",
+    },
+  ],
   isThinking: false,
   model: "phi4:14b",
+  lastError: "",
 
   setTheme: (theme) => set({ theme }),
-  addMessage: (msg) =>
-    set((state) => ({ messages: [...state.messages, msg] })),
+  addMessage: (message) =>
+    set((state) => ({ messages: [...state.messages, message] })),
   setThinking: (isThinking) => set({ isThinking }),
-  setModel: (model) => set({ model })
+  setModel: (model) => set({ model }),
+  setLastError: (lastError) => set({ lastError }),
+  clearMessages: () =>
+    set({
+      messages: [
+        {
+          role: "assistant",
+          content: "Chat cleared. I'm ready for the next task.",
+        },
+      ],
+    }),
 }));

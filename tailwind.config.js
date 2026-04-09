@@ -1,4 +1,4 @@
-export default {
+module.exports = {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   darkMode: "class",
   theme: {
@@ -9,10 +9,10 @@ export default {
           bgLight: "#f7f7fb",
           accent: "#6366f1",
           accentSoft: "#4f46e5",
-          border: "#1f2933"
-        }
-      }
-    }
+          border: "#1f2933",
+        },
+      },
+    },
   },
-  plugins: []
+  plugins: [],
 };

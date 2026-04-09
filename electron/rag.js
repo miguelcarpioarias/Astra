@@ -1,52 +1,143 @@
-const { ChromaClient } = require("chromadb");
 const path = require("path");
 const fs = require("fs");
-const fetch = require("node-fetch");
 
-const DATA_DIR = path.join(__dirname, "../data");
+const DATA_DIR = path.join(__dirname, "../data/chroma");
+const INDEX_PATH = path.join(DATA_DIR, "index.json");
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
+const EMBEDDING_MODEL = process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text";
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
-const client = new ChromaClient({ path: path.join(DATA_DIR, "chroma") });
+function readIndex() {
+  if (!fs.existsSync(INDEX_PATH)) {
+    return [];
+  }
 
-async function getCollection() {
-  return client.getOrCreateCollection({ name: "astra-knowledge" });
+  try {
+    const raw = fs.readFileSync(INDEX_PATH, "utf8");
+    return raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    throw new Error(`Failed to read local RAG index: ${error.message}`);
+  }
+}
+
+function writeIndex(entries) {
+  fs.writeFileSync(INDEX_PATH, JSON.stringify(entries, null, 2));
 }
 
 async function embedTexts(texts) {
-  const res = await fetch(`${OLLAMA_URL}/api/embeddings`, {
+  const response = await fetch(`${OLLAMA_URL}/api/embeddings`, {
     method: "POST",
     body: JSON.stringify({
-      model: "nomic-embed-text",
+      model: EMBEDDING_MODEL,
       input: texts
     }),
     headers: { "Content-Type": "application/json" }
   });
-  const json = await res.json();
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Embedding request failed (${response.status}): ${details}`);
+  }
+
+  const json = await response.json();
+
+  if (!Array.isArray(json.embeddings)) {
+    throw new Error("Embedding response did not include embeddings.");
+  }
+
   return json.embeddings;
 }
 
-async function handleRAGIngest(_event, { id, text, metadata }) {
-  const collection = await getCollection();
-  const embeddings = await embedTexts([text]);
-  await collection.add({
-    ids: [id],
-    embeddings,
-    metadatas: [metadata || {}],
-    documents: [text]
-  });
-  return { ok: true };
+function cosineSimilarity(left, right) {
+  let dot = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftValue = left[index] || 0;
+    const rightValue = right[index] || 0;
+    dot += leftValue * rightValue;
+    leftMagnitude += leftValue * leftValue;
+    rightMagnitude += rightValue * rightValue;
+  }
+
+  if (!leftMagnitude || !rightMagnitude) {
+    return 0;
+  }
+
+  return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
 }
 
-async function handleRAGQuery(_event, { query, topK = 5 }) {
-  const collection = await getCollection();
-  const queryEmb = await embedTexts([query]);
-  const result = await collection.query({
-    queryEmbeddings: queryEmb,
-    nResults: topK
+function normalizeMetadata(metadata, fallbackId) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return { sourceId: fallbackId };
+  }
+
+  return { ...metadata, sourceId: fallbackId };
+}
+
+async function handleRAGIngest(_event, { id, text, metadata } = {}) {
+  if (!id || !text) {
+    throw new Error("RAG ingest requires both id and text.");
+  }
+
+  const embeddings = await embedTexts([text]);
+  const entries = readIndex().filter((entry) => entry.id !== id);
+
+  entries.push({
+    id,
+    text,
+    metadata: normalizeMetadata(metadata, id),
+    embedding: embeddings[0],
+    updatedAt: new Date().toISOString()
   });
-  return result;
+
+  writeIndex(entries);
+
+  return {
+    ok: true,
+    id,
+    count: entries.length
+  };
+}
+
+async function handleRAGQuery(_event, { query, topK = 5 } = {}) {
+  if (!query) {
+    throw new Error("RAG query requires a query string.");
+  }
+
+  const entries = readIndex();
+
+  if (entries.length === 0) {
+    return {
+      ids: [[]],
+      documents: [[]],
+      metadatas: [[]],
+      distances: [[]]
+    };
+  }
+
+  const queryEmb = await embedTexts([query]);
+  const ranked = entries
+    .map((entry) => {
+      const score = cosineSimilarity(queryEmb[0], entry.embedding || []);
+      return {
+        ...entry,
+        score
+      };
+    })
+    .sort((left, right) => right.score - left.score)
+    .slice(0, Math.max(1, topK));
+
+  return {
+    ids: [ranked.map((entry) => entry.id)],
+    documents: [ranked.map((entry) => entry.text)],
+    metadatas: [ranked.map((entry) => entry.metadata || {})],
+    distances: [ranked.map((entry) => 1 - entry.score)]
+  };
 }
 
 module.exports = { handleRAGIngest, handleRAGQuery };
