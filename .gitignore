@@ -1,0 +1,7 @@
+node_modules/
+dist/
+data/*
+!data/.gitkeep
+!data/chroma/
+data/chroma/*
+!data/chroma/.gitkeep
