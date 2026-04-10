@@ -32,7 +32,7 @@ if (APP_DIAGNOSTIC_MODE) {
 const { app, BrowserWindow, ipcMain } = electronModule;
 const { createMainWindow, loadMainWindowContent, toggleMainWindow } = require("./window");
 const { registerGlobalHotkeys, resolveHotkeyConfig, unregisterGlobalHotkeys } = require("./hotkeys");
-const { handleLLMRequest } = require("./ollamaClient");
+const { DEFAULT_MODEL, getOllamaStatus, handleLLMRequest } = require("./ollamaClient");
 const { handleToolCall } = require("./tools/registry");
 const { handleRAGQuery, handleRAGIngest } = require("./rag");
 
@@ -53,6 +53,13 @@ let hotkeyStatus = {
   source: "default",
   usedFallback: false,
 };
+let ollamaStatus = {
+  available: false,
+  defaultModel: DEFAULT_MODEL,
+  error: "",
+  models: [],
+  url: "",
+};
 
 function registerIpcHandlers() {
   ipcMain.removeHandler("astra:llm");
@@ -65,9 +72,14 @@ function registerIpcHandlers() {
   ipcMain.handle("astra:tool", handleToolCall);
   ipcMain.handle("astra:rag:query", handleRAGQuery);
   ipcMain.handle("astra:rag:ingest", handleRAGIngest);
-  ipcMain.handle("astra:app-info", async () => ({
-    hotkey: hotkeyStatus,
-  }));
+  ipcMain.handle("astra:app-info", async () => {
+    ollamaStatus = await getOllamaStatus();
+
+    return {
+      hotkey: hotkeyStatus,
+      ollama: ollamaStatus,
+    };
+  });
 }
 
 async function openMainWindow() {

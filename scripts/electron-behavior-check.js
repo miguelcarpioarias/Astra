@@ -15,6 +15,7 @@ const {
   registerGlobalHotkeys,
   unregisterGlobalHotkeys,
 } = require("../electron/hotkeys");
+const { getOllamaStatus } = require("../electron/ollamaClient");
 
 const args = new Map(
   process.argv.slice(2).map((entry) => {
@@ -86,22 +87,29 @@ function writeReport(report) {
 
 async function inspectRenderer(mainWindow) {
   return mainWindow.webContents.executeJavaScript(
-    `(() => ({
-      href: window.location.href,
-      protocol: window.location.protocol,
-      title: document.title,
-      rootExists: Boolean(document.getElementById("root")),
-      astraType: typeof window.astra,
-      astraKeys: Object.keys(window.astra || {}).sort(),
-      astraBridgeShape: {
-        isAvailable: window.astra?.isAvailable === true,
-        getAppInfo: typeof window.astra?.getAppInfo,
-        llm: typeof window.astra?.llm,
-        tool: typeof window.astra?.tool,
-        ragQuery: typeof window.astra?.ragQuery,
-        ragIngest: typeof window.astra?.ragIngest
-      }
-    }))()`,
+    `(async () => {
+      const appInfo = typeof window.astra?.getAppInfo === "function"
+        ? await window.astra.getAppInfo()
+        : null;
+
+      return {
+        href: window.location.href,
+        protocol: window.location.protocol,
+        title: document.title,
+        rootExists: Boolean(document.getElementById("root")),
+        astraType: typeof window.astra,
+        astraKeys: Object.keys(window.astra || {}).sort(),
+        astraBridgeShape: {
+          isAvailable: window.astra?.isAvailable === true,
+          getAppInfo: typeof window.astra?.getAppInfo,
+          llm: typeof window.astra?.llm,
+          tool: typeof window.astra?.tool,
+          ragQuery: typeof window.astra?.ragQuery,
+          ragIngest: typeof window.astra?.ragIngest
+        },
+        appInfo
+      };
+    })()`,
     true,
   );
 }
@@ -135,11 +143,19 @@ async function run() {
     source: "default",
     usedFallback: false,
   };
+  let currentOllamaStatus = {
+    available: false,
+    defaultModel: "",
+    error: "",
+    models: [],
+    url: "",
+  };
 
   try {
     await app.whenReady();
 
     report.intendedRendererEntry = resolveRendererEntry(app);
+    currentOllamaStatus = await getOllamaStatus();
     const hotkeyConfig = resolveHotkeyConfig({ app });
     report.configuredHotkey = {
       shortcut: hotkeyConfig.shortcut,
@@ -152,6 +168,7 @@ async function run() {
     ipcMain.removeHandler("astra:app-info");
     ipcMain.handle("astra:app-info", async () => ({
       hotkey: currentHotkeyStatus,
+      ollama: currentOllamaStatus,
     }));
 
     mainWindow = createMainWindow(app, { showOnLaunch: false });

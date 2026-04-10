@@ -10,7 +10,10 @@ import { ActionRow } from "./components/ActionRow";
 export default function App() {
   const theme = useAstraStore((state) => state.theme);
   const lastError = useAstraStore((state) => state.lastError);
+  const model = useAstraStore((state) => state.model);
+  const appInfo = useAstraStore((state) => state.appInfo);
   const setAppInfo = useAstraStore((state) => state.setAppInfo);
+  const setModel = useAstraStore((state) => state.setModel);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -36,6 +39,13 @@ export default function App() {
               source: "default",
               usedFallback: false,
             },
+            ollama: {
+              available: false,
+              defaultModel: "phi4:14b",
+              error: "",
+              models: [],
+              url: "http://localhost:11434",
+            },
           });
         }
       }
@@ -47,6 +57,26 @@ export default function App() {
       isMounted = false;
     };
   }, [setAppInfo]);
+
+  useEffect(() => {
+    const availableModels = appInfo.ollama?.models || [];
+    if (availableModels.length === 0) {
+      return;
+    }
+
+    const modelNames = availableModels.map((entry) => entry.name).filter(Boolean);
+    if (modelNames.includes(model)) {
+      return;
+    }
+
+    const preferredModel = modelNames.includes(appInfo.ollama.defaultModel)
+      ? appInfo.ollama.defaultModel
+      : modelNames[0];
+
+    if (preferredModel) {
+      setModel(preferredModel);
+    }
+  }, [appInfo, model, setModel]);
 
   return (
     <div className="flex h-screen w-screen bg-astral-bgDark text-sm text-slate-100">

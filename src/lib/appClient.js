@@ -8,6 +8,13 @@ export async function getAppInfo() {
         source: "default",
         usedFallback: false,
       },
+      ollama: {
+        available: false,
+        defaultModel: "phi4:14b",
+        error: "",
+        models: [],
+        url: "http://localhost:11434",
+      },
     };
   }
 

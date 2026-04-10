@@ -24,12 +24,17 @@ function buildPrompt(prompt, context, tools) {
   return sections.join("\n\n");
 }
 
-async function requestOllama(endpoint, payload) {
-  const response = await fetch(`${OLLAMA_URL}${endpoint}`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-    headers: { "Content-Type": "application/json" }
-  });
+async function requestOllama(endpoint, { method = "POST", payload } = {}) {
+  const options = {
+    method,
+    headers: { "Content-Type": "application/json" },
+  };
+
+  if (payload !== undefined) {
+    options.body = JSON.stringify(payload);
+  }
+
+  const response = await fetch(`${OLLAMA_URL}${endpoint}`, options);
 
   if (!response.ok) {
     const details = await response.text();
@@ -37,6 +42,36 @@ async function requestOllama(endpoint, payload) {
   }
 
   return response.json();
+}
+
+async function getOllamaStatus() {
+  try {
+    const json = await requestOllama("/api/tags", { method: "GET" });
+    const models = Array.isArray(json?.models)
+      ? json.models.map((model) => ({
+          digest: model.digest || "",
+          modifiedAt: model.modified_at || "",
+          name: model.name || model.model || "",
+          size: model.size || 0,
+        }))
+      : [];
+
+    return {
+      available: true,
+      defaultModel: DEFAULT_MODEL,
+      error: "",
+      models,
+      url: OLLAMA_URL,
+    };
+  } catch (error) {
+    return {
+      available: false,
+      defaultModel: DEFAULT_MODEL,
+      error: error.message,
+      models: [],
+      url: OLLAMA_URL,
+    };
+  }
 }
 
 async function handleLLMRequest(_event, { model, prompt, system, tools, context } = {}) {
@@ -51,8 +86,8 @@ async function handleLLMRequest(_event, { model, prompt, system, tools, context 
     stream: false
   };
 
-  const json = await requestOllama("/api/generate", body);
+  const json = await requestOllama("/api/generate", { payload: body });
   return json.response || "";
 }
 
-module.exports = { handleLLMRequest };
+module.exports = { DEFAULT_MODEL, OLLAMA_URL, getOllamaStatus, handleLLMRequest };
